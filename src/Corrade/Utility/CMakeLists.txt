@@ -162,7 +162,7 @@ if(CORRADE_WITH_UTILITY)
     # aren't, we have to compile select files separately for each. Otherwise
     # some code would expect a function symbol to be exist and some expect a
     # function pointer symbol.
-    if(CORRADE_BUILD_TESTS_FORCE_CPU_POINTER_DISPATCH AND (NOT CORRADE_BUILD_CPU_RUNTIME_DISPATCH OR CORRADE_CPU_USE_IFUNC))
+    if(NOT CORRADE_BUILD_CPU_RUNTIME_DISPATCH OR CORRADE_CPU_USE_IFUNC)
         list(APPEND CorradeUtility_GracefulAssert_SRCS ${CorradeUtility_CpuDispatch_SRCS})
     else()
         list(APPEND CorradeUtility_SRCS ${CorradeUtility_CpuDispatch_SRCS})
@@ -214,35 +214,6 @@ if(CORRADE_WITH_UTILITY)
             LIBRARY DESTINATION ${CORRADE_LIBRARY_INSTALL_DIR}
             ARCHIVE DESTINATION ${CORRADE_LIBRARY_INSTALL_DIR})
     install(FILES ${CorradeUtility_HEADERS} DESTINATION ${CORRADE_INCLUDE_INSTALL_DIR}/Utility)
-
-    if(CORRADE_BUILD_TESTS)
-        # Library with graceful assert, function-pointer-based CPU dispatch
-        # and WASM SIMD128 for testing. If tests need such behavior, they
-        # should link to CorradeTestSuiteTestLib instead. Otherwise the
-        # implicitly linked CorradeTestSuite would drag in CorradeUtility in
-        # addition to CorradeUtilityTestLib, leading to ODR violations and
-        # making ASan builds fail.
-        add_library(CorradeUtilityTestLib ${SHARED_OR_STATIC} ${EXCLUDE_FROM_ALL_IF_TEST_TARGET}
-            $<TARGET_OBJECTS:CorradeUtilityObjects>
-            ${CorradeUtility_GracefulAssert_SRCS})
-        target_include_directories(CorradeUtilityTestLib PUBLIC
-            $<TARGET_PROPERTY:CorradeUtility,INTERFACE_INCLUDE_DIRECTORIES>)
-        target_link_libraries(CorradeUtilityTestLib PUBLIC
-            $<TARGET_PROPERTY:CorradeUtility,INTERFACE_LINK_LIBRARIES>)
-        target_compile_definitions(CorradeUtilityTestLib PRIVATE "CORRADE_GRACEFUL_ASSERT")
-        if(CORRADE_BUILD_TESTS_FORCE_CPU_POINTER_DISPATCH)
-            target_compile_definitions(CorradeUtilityTestLib PUBLIC "CORRADE_UTILITY_FORCE_CPU_POINTER_DISPATCH")
-            if(CORRADE_BUILD_TESTS_FORCE_WASM_SIMD128)
-                target_compile_options(CorradeUtilityTestLib PUBLIC "-msimd128")
-            endif()
-        endif()
-        set_target_properties(CorradeUtilityTestLib PROPERTIES DEBUG_POSTFIX "-d")
-        if(CORRADE_BUILD_STATIC_PIC)
-            set_target_properties(CorradeUtilityTestLib PROPERTIES POSITION_INDEPENDENT_CODE ON)
-        endif()
-
-        add_subdirectory(Test ${EXCLUDE_FROM_ALL_IF_TEST_TARGET})
-    endif()
 
     # Corrade::Utility target alias for superprojects
     add_library(Corrade::Utility ALIAS CorradeUtility)

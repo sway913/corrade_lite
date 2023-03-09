@@ -122,10 +122,11 @@ endif()
 
 option(CORRADE_WITH_INTERCONNECT "Build Interconnect library" ON)
 option(CORRADE_WITH_PLUGINMANAGER "Build PluginManager library" ON)
-option(CORRADE_WITH_TESTSUITE "Build TestSuite library" ON)
-cmake_dependent_option(CORRADE_WITH_UTILITY "Build Utility library" ON "NOT CORRADE_WITH_INTERCONNECT;NOT CORRADE_WITH_PLUGINMANAGER;NOT CORRADE_WITH_TESTSUITE" ON)
+cmake_dependent_option(CORRADE_WITH_UTILITY "Build Utility library" ON "NOT CORRADE_WITH_INTERCONNECT;NOT CORRADE_WITH_PLUGINMANAGER" ON)
 cmake_dependent_option(CORRADE_WITH_RC "Build the corrade-rc utility" ON "NOT CORRADE_WITH_UTILITY" ON)
-cmake_dependent_option(CORRADE_WITH_MAIN "Build Main library" ON "NOT CORRADE_WITH_TESTSUITE;NOT CORRADE_WITH_RC" ON)
+cmake_dependent_option(CORRADE_WITH_MAIN "Build Main library" ON "NOT CORRADE_WITH_RC" ON)
+
+option(CORRADE_BUILD_EXAMPLES "build examples for PluginManager and Interconnect" OFF)
 
 option(CORRADE_BUILD_DEPRECATED "Include deprecated API in the build" ON)
 
@@ -142,7 +143,6 @@ else()
 endif()
 cmake_dependent_option(CORRADE_BUILD_STATIC_PIC "Build static libraries with position-independent code" ${ON_EXCEPT_EMSCRIPTEN} "CORRADE_BUILD_STATIC" OFF)
 cmake_dependent_option(CORRADE_BUILD_STATIC_UNIQUE_GLOBALS "Build static libraries with globals unique across shared libraries" ${ON_EXCEPT_EMSCRIPTEN} "CORRADE_BUILD_STATIC" OFF)
-option(CORRADE_BUILD_TESTS "Build unit tests" OFF)
 
 # Option-independent platform discovery
 if(CMAKE_SYSTEM_NAME STREQUAL Emscripten)
@@ -269,11 +269,6 @@ cmake_dependent_option(CORRADE_CPU_USE_IFUNC "Allow using GNU IFUNC for runtime 
 # negative perf consequences, enable it by default only on platforms that have
 # IFUNC, and thus can avoid the function pointer indirection.
 option(CORRADE_BUILD_CPU_RUNTIME_DISPATCH "Build with runtime dispatch for CPU-dependent functionality" ${_CORRADE_CPU_CAN_USE_IFUNC})
-# Enabled by default and independent of CORRADE_BUILD_CPU_RUNTIME_DISPATCH as
-# correctness is important. It can however negatively affect performance
-# compared to IFUNC or compile-time dispatch, so make it possible to disable
-# this for benchmarks.
-cmake_dependent_option(CORRADE_BUILD_TESTS_FORCE_CPU_POINTER_DISPATCH "Force pointer-based dispatch for unit tests to verify all variants of CPU-dependent functionality" ON "CORRADE_BUILD_TESTS" OFF)
 
 # Pass -msimd128 to tests to make it possible to verify also the WASM SIMD
 # functionality even if the actual library is built without. I thought it would
@@ -292,19 +287,7 @@ cmake_dependent_option(CORRADE_BUILD_TESTS_FORCE_CPU_POINTER_DISPATCH "Force poi
 # So instead of having -msimd128 always, I only enable it implicitly if Node.js
 # 15 is found, and then CORRADE_ENABLE_SIMD128 / CORRADE_TARGET_SIMD128 gets
 # enabled only if there's Clang 13 but also Emscripten 2.0.18+. What a mess.
-if(CORRADE_TARGET_EMSCRIPTEN)
-    set(ENABLE_IF_NODEJS_15 OFF)
-    if(CORRADE_BUILD_TESTS)
-        find_package(NodeJs REQUIRED QUIET)
-        if(NOT NodeJs_VERSION VERSION_LESS 15.0)
-            set(ENABLE_IF_NODEJS_15 ON)
-        elseif(NOT DEFINED CORRADE_BUILD_TESTS_FORCE_WASM_SIMD128)
-            message(WARNING "Disabling CORRADE_BUILD_TESTS_FORCE_WASM_SIMD128 by default as finalized WebAssembly SIMD support is only since Node.js 15 but found version ${NodeJs_VERSION}")
-        endif()
-    endif()
 
-    cmake_dependent_option(CORRADE_BUILD_TESTS_FORCE_WASM_SIMD128 "Force -msimd128 for unit tests to verify also WASM SIMD variants of CPU-dependent functionality" ${ENABLE_IF_NODEJS_15} "CORRADE_BUILD_TESTS_FORCE_CPU_POINTER_DISPATCH" OFF)
-endif()
 
 # Backwards compatibility for unprefixed CMake options. If the user isn't
 # explicitly using prefixed options in the first run already, accept the
@@ -364,26 +347,6 @@ if(_CORRADE_ACCEPT_DEPRECATED_UNPREFIXED_OPTIONS AND CORRADE_BUILD_DEPRECATED)
             set(DEPRECATION_OR_WARNING DEPRECATION)
         endif()
         message(${DEPRECATION_OR_WARNING} "Unprefixed options such as ${_CORRADE_WARN_DEPRECATED_UNPREFIXED_OPTION} are deprecated, use CORRADE_${_CORRADE_WARN_DEPRECATED_UNPREFIXED_OPTION} instead. Delete the unprefixed variable from CMake cache or set both to the same value to silence this warning.")
-    endif()
-endif()
-
-# Initialize variables, macros etc.
-if(CORRADE_BUILD_TESTS)
-    if(CORRADE_TARGET_IOS)
-        set(CORRADE_TESTSUITE_BUNDLE_IDENTIFIER_PREFIX "cz.mosra.corrade")
-    endif()
-    enable_testing()
-
-    # If CORRADE_TESTSUITE_TEST_TARGET is set, tests aren't built by default
-    # (in the ALL target) but instead set as dependencies of a target named
-    # after the value of CORRADE_TESTSUITE_TEST_TARGET. This is a copy of
-    # what's done in corrade_add_test(), because we also build various test
-    # libraries and plugins in addition to the test executables.
-    if(CORRADE_TESTSUITE_TEST_TARGET)
-        if(NOT TARGET ${CORRADE_TESTSUITE_TEST_TARGET})
-            add_custom_target(${CORRADE_TESTSUITE_TEST_TARGET})
-        endif()
-        set(EXCLUDE_FROM_ALL_IF_TEST_TARGET EXCLUDE_FROM_ALL)
     endif()
 endif()
 
@@ -518,12 +481,3 @@ set(_CORRADE_USE_NO_TARGET_CHECKS 1)
 add_subdirectory(modules)
 add_subdirectory(src)
 
-# Build snippets as part of testing. Unlike all other Test/ directories, this
-# one isn't added with ${EXCLUDE_FROM_ALL_IF_TEST_TARGET} because the targets
-# from there aren't referenced by CTest and thus it'd likely happen that they
-# accidentally don't get added as a dependency to that target, causing them to
-# be never built. Instead, each target there is handled separately, to minimize
-# the chance of an accident.
-if(CORRADE_BUILD_TESTS)
-    add_subdirectory(doc/snippets)
-endif()
